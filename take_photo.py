@@ -3,12 +3,17 @@
 Take a photo using a USB camera for use as a FarmBot Farmware.
 '''
 
+import os.path
 from time import time, sleep
 import cv2
 
 # Settings
 camera_port = 0      # default USB camera port
 discard_frames = 20  # number of frames to discard for auto-adjust
+
+# Check for camera
+if not os.path.exists('/dev/video' + str(camera_port)):
+    print("Camera not detected.")
 
 # Open the camera
 camera = cv2.VideoCapture(camera_port)
@@ -32,6 +37,6 @@ filename = '/tmp/images/{timestamp}.jpg'.format(timestamp=epoch)
 if ret:  # an image has been returned by the camera
     # Save the image to file
     cv2.imwrite(filename, image)
-    print "Image saved: {}".format(filename)
+    print("Image saved: {}".format(filename))
 else:  # no image has been returned by the camera
-    print "No camera detected."
+    print("Problem getting image.")
