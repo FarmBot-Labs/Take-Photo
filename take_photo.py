@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 '''Take a photo.
 
 Take a photo using a USB camera for use as a FarmBot Farmware.
@@ -9,15 +10,28 @@ import cv2
 
 # Settings
 camera_port = 0      # default USB camera port
+# image_width = 1600   # pixels
+# image_height = 1200  # pixels
 discard_frames = 20  # number of frames to discard for auto-adjust
 
 # Check for camera
 if not os.path.exists('/dev/video' + str(camera_port)):
-    print("Camera not detected.")
+    print("No camera detected at video{}.".format(camera_port))
+    camera_port += 1
+    print("Trying video{}...".format(camera_port))
+    if not os.path.exists('/dev/video' + str(camera_port)):
+        print("No camera detected at video{}.".format(camera_port))
 
 # Open the camera
 camera = cv2.VideoCapture(camera_port)
 sleep(0.1)
+
+# try:
+#     camera.set(cv2.CAP_PROP_FRAME_WIDTH, image_width)
+#     camera.set(cv2.CAP_PROP_FRAME_HEIGHT, image_height)
+# except AttributeError:
+#     camera.set(cv2.cv.CV_CAP_PROP_FRAME_WIDTH, image_width)
+#     camera.set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT, image_height)
 
 # Let camera adjust
 for i in range(discard_frames):
