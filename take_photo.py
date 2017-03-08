@@ -78,7 +78,7 @@ if __name__ == '__main__':
     except (KeyError, ValueError):
         CAMERA = 'USB'  # default camera
 
-    if CAMERA == 'USB':
-        usb_camera_photo()
-    elif CAMERA == 'RPI':
+    if 'RPI' in CAMERA:
         rpi_camera_photo()
+    else:
+        usb_camera_photo()
