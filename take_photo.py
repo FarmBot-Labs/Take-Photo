@@ -64,7 +64,7 @@ def rpi_camera_photo():
     'Take a photo using the Raspberry Pi Camera.'
     from subprocess import call
     try:
-        retcode = call(["raspistill", "-w", "640", "-h", "480" "-o", image_filename()])
+        retcode = call(["raspistill", "-w", "640", "-h", "480", "-o", image_filename()])
         if retcode == 0:
             print("Image saved: {}".format(image_filename()))
         else:
