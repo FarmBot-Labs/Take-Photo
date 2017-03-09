@@ -19,8 +19,6 @@ def usb_camera_photo():
     import cv2
     # Settings
     camera_port = 0      # default USB camera port
-    # image_width = 1600   # pixels
-    # image_height = 1200  # pixels
     discard_frames = 20  # number of frames to discard for auto-adjust
 
     # Check for camera
@@ -34,13 +32,6 @@ def usb_camera_photo():
     # Open the camera
     camera = cv2.VideoCapture(camera_port)
     sleep(0.1)
-
-    # try:
-    #     camera.set(cv2.CAP_PROP_FRAME_WIDTH, image_width)
-    #     camera.set(cv2.CAP_PROP_FRAME_HEIGHT, image_height)
-    # except AttributeError:
-    #     camera.set(cv2.cv.CV_CAP_PROP_FRAME_WIDTH, image_width)
-    #     camera.set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT, image_height)
 
     # Let camera adjust
     for _ in range(discard_frames):
@@ -64,7 +55,8 @@ def rpi_camera_photo():
     'Take a photo using the Raspberry Pi Camera.'
     from subprocess import call
     try:
-        retcode = call(["raspistill", "-md", "4", "-o", image_filename()])
+        retcode = call(
+            ["raspistill", "-w", "640", "-h", "480", "-o", image_filename()])
         if retcode == 0:
             print("Image saved: {}".format(image_filename()))
         else:
