@@ -12,18 +12,18 @@ import requests
 
 def log(message, message_type):
     'Send a message to the log.'
-    full_message = '[take-photo] ' + str(message)
     try:
         os.environ['FARMWARE_URL']
     except KeyError:
-        print(full_message)
+        print(message)
     else:
+        log_message = '[take-photo] ' + str(message)
         headers = {
             'Authorization': 'bearer {}'.format(os.environ['FARMWARE_TOKEN']),
             'content-type': "application/json"}
         payload = json.dumps(
             {"kind": "send_message",
-             "args": {"message": full_message, "message_type": message_type}})
+             "args": {"message": log_message, "message_type": message_type}})
         requests.post(os.environ['FARMWARE_URL'] + 'celery_script',
                       data=payload, headers=headers)
 
