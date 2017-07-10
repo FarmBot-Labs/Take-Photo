@@ -4,8 +4,28 @@
 Take a photo using a USB or Raspberry Pi camera.
 '''
 
-import os.path
+import os
 from time import time, sleep
+import json
+import requests
+
+
+def log(message, message_type):
+    'Send a message to the log.'
+    full_message = '[take-photo] ' + str(message)
+    try:
+        os.environ['FARMWARE_URL']
+    except KeyError:
+        print(full_message)
+    else:
+        headers = {
+            'Authorization': 'bearer {}'.format(os.environ['FARMWARE_TOKEN']),
+            'content-type': "application/json"}
+        payload = json.dumps(
+            {"kind": "send_message",
+             "args": {"message": full_message, "message_type": message_type}})
+        requests.post(os.environ['FARMWARE_URL'] + 'celery_script',
+                      data=payload, headers=headers)
 
 
 def image_filename():
@@ -28,6 +48,7 @@ def usb_camera_photo():
         print("Trying video{}...".format(camera_port))
         if not os.path.exists('/dev/video' + str(camera_port)):
             print("No camera detected at video{}.".format(camera_port))
+            log("USB Camera not detected.", "error")
 
     # Open the camera
     camera = cv2.VideoCapture(camera_port)
@@ -49,7 +70,7 @@ def usb_camera_photo():
         cv2.imwrite(image_filename(), image)
         print("Image saved: {}".format(image_filename()))
     else:  # no image has been returned by the camera
-        print("Problem getting image.")
+        log("Problem getting image.", "error")
 
 def rpi_camera_photo():
     'Take a photo using the Raspberry Pi Camera.'
@@ -60,9 +81,9 @@ def rpi_camera_photo():
         if retcode == 0:
             print("Image saved: {}".format(image_filename()))
         else:
-            print("Problem getting image.")
+            log("Problem getting image.", "error")
     except OSError:
-        print("Raspberry Pi Camera not detected.")
+        log("Raspberry Pi Camera not detected.", "error")
 
 if __name__ == '__main__':
     try:
