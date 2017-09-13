@@ -6,6 +6,7 @@ Take a photo using a USB or Raspberry Pi camera.
 
 import os
 from time import time, sleep
+from shutil import move
 import json
 import requests
 
@@ -31,8 +32,18 @@ def log(message, message_type):
 def image_filename():
     'Prepare filename with timestamp.'
     epoch = int(time())
-    filename = '/tmp/images/{timestamp}.jpg'.format(timestamp=epoch)
+    filename = '{timestamp}.jpg'.format(timestamp=epoch)
     return filename
+
+def tmp_path(filename):
+    'Filename with path for uploading an image.'
+    path = '/tmp/' + filename
+    return path
+
+def upload_path(filename):
+    'Filename with path for uploading an image.'
+    path = os.environ['IMAGES_DIR'] + os.sep + filename
+    return path
 
 def usb_camera_photo():
     'Take a photo using a USB camera.'
@@ -76,8 +87,9 @@ def usb_camera_photo():
     # Output
     if ret:  # an image has been returned by the camera
         # Save the image to file
-        cv2.imwrite(image_filename(), image)
-        print("Image saved: {}".format(image_filename()))
+        filename = image_filename()
+        cv2.imwrite(upload_path(filename), image)
+        print("Image saved: {}".format(upload_path(filename)))
     else:  # no image has been returned by the camera
         log("Problem getting image.", "error")
 
@@ -85,10 +97,12 @@ def rpi_camera_photo():
     'Take a photo using the Raspberry Pi Camera.'
     from subprocess import call
     try:
+        filename = image_filename()
         retcode = call(
-            ["raspistill", "-w", "640", "-h", "480", "-o", image_filename()])
+            ["raspistill", "-w", "640", "-h", "480", "-o", tmp_path(filename)])
+        move(tmp_path(filename), upload_path(filename))
         if retcode == 0:
-            print("Image saved: {}".format(image_filename()))
+            print("Image saved: {}".format(upload_path(filename)))
         else:
             log("Problem getting image.", "error")
     except OSError:
