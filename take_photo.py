@@ -99,7 +99,7 @@ def rpi_camera_photo():
     try:
         filename = image_filename()
         retcode = call(
-            ["raspistill", "-w", "640", "-h", "480", "-o", tmp_path(filename)])
+            ["raspistill", "-m", "4", "-o", tmp_path(filename)])
         move(tmp_path(filename), upload_path(filename))
         if retcode == 0:
             print("Image saved: {}".format(upload_path(filename)))
