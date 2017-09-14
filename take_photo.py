@@ -6,7 +6,7 @@ Take a photo using a USB or Raspberry Pi camera.
 
 import os
 from time import time, sleep
-from shutil import copy
+from shutil import move
 import json
 import requests
 
@@ -100,8 +100,7 @@ def rpi_camera_photo():
         filename = image_filename()
         retcode = call(
             ["raspistill", "-w", "640", "-h", "480", "-o", tmp_path(filename)])
-        copy(tmp_path(filename), upload_path(filename))
-        os.remove(tmp_path(filename))
+        move(tmp_path(filename), upload_path(filename))
         if retcode == 0:
             print("Image saved: {}".format(upload_path(filename)))
         else:
