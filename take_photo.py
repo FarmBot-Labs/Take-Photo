@@ -11,6 +11,11 @@ import json
 import requests
 
 
+def api_url():
+    major_version = int(os.getenv('FARMBOT_OS_VERSION', '0.0.0')[0])
+    base_url = os.environ['FARMWARE_URL']
+    return base_url + 'api/v1/' if major_version > 5 else base_url
+
 def log(message, message_type):
     'Send a message to the log.'
     try:
@@ -25,9 +30,8 @@ def log(message, message_type):
         payload = json.dumps(
             {"kind": "send_message",
              "args": {"message": log_message, "message_type": message_type}})
-        requests.post(os.environ['FARMWARE_URL'] + 'celery_script',
+        requests.post(api_url() + 'celery_script',
                       data=payload, headers=headers)
-
 
 def image_filename():
     'Prepare filename with timestamp.'
