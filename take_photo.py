@@ -8,6 +8,8 @@ import os
 from time import time, sleep
 import json
 import requests
+import numpy as np
+import cv2
 
 
 def farmware_api_url():
@@ -32,16 +34,35 @@ def log(message, message_type):
         requests.post(farmware_api_url() + 'celery_script',
                       data=payload, headers=headers)
 
+def rotate(image):
+    'Rotate image if calibration data exists.'
+    angle = float(os.environ['CAMERA_CALIBRATION_total_rotation_angle'])
+    sign = -1 if angle < 0 else 1
+    turns, remainder = -int(angle / 90.), abs(angle) % 90  # 165 --> -1, 75
+    if remainder > 45: turns -= 1 * sign  # 75 --> -1 more turn (-2 turns total)
+    angle += 90 * turns                   #        -15 degrees
+    image = np.rot90(image, k=turns)
+    height, width, _ = image.shape
+    matrix = cv2.getRotationMatrix2D((int(width / 2), int(height / 2)), angle, 1)
+    return cv2.warpAffine(image, matrix, (width, height))
 
 def image_filename():
     'Prepare filename with timestamp.'
     epoch = int(time())
-    filename = '/tmp/images/{timestamp}.jpg'.format(timestamp=epoch)
+    filename = '{timestamp}.jpg'.format(timestamp=epoch)
     return filename
+
+def upload_path(filename):
+    'Filename with path for uploading an image.'
+    try:
+        images_dir = os.environ['IMAGES_DIR']
+    except KeyError:
+        images_dir = '/tmp/images'
+    path = images_dir + os.sep + filename
+    return path
 
 def usb_camera_photo():
     'Take a photo using a USB camera.'
-    import cv2
     # Settings
     camera_port = 0      # default USB camera port
     discard_frames = 20  # number of frames to discard for auto-adjust
@@ -71,9 +92,17 @@ def usb_camera_photo():
 
     # Output
     if ret:  # an image has been returned by the camera
+        filename = image_filename()
+        # Try to rotate the image
+        try:
+            final_image = rotate(image)
+        except:
+            final_image = image
+        else:
+            filename = 'rotated_' + filename
         # Save the image to file
-        cv2.imwrite(image_filename(), image)
-        print("Image saved: {}".format(image_filename()))
+        cv2.imwrite(upload_path(filename), final_image)
+        print("Image saved: {}".format(upload_path(filename)))
     else:  # no image has been returned by the camera
         log("Problem getting image.", "error")
 
@@ -81,10 +110,11 @@ def rpi_camera_photo():
     'Take a photo using the Raspberry Pi Camera.'
     from subprocess import call
     try:
+        filename_path = upload_path(image_filename())
         retcode = call(
-            ["raspistill", "-w", "640", "-h", "480", "-o", image_filename()])
+            ["raspistill", "-w", "640", "-h", "480", "-o", filename_path])
         if retcode == 0:
-            print("Image saved: {}".format(image_filename()))
+            print("Image saved: {}".format(filename_path))
         else:
             log("Problem getting image.", "error")
     except OSError:
