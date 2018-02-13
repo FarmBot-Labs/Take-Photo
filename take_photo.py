@@ -9,6 +9,8 @@ from time import time, sleep
 from shutil import move
 import json
 import requests
+import numpy as np
+import cv2
 
 
 def api_url():
@@ -33,6 +35,18 @@ def log(message, message_type):
         requests.post(api_url() + 'celery_script',
                       data=payload, headers=headers)
 
+def rotate(image):
+    'Rotate image if calibration data exists.'
+    angle = float(os.environ['CAMERA_CALIBRATION_total_rotation_angle'])
+    sign = -1 if angle < 0 else 1
+    turns, remainder = -int(angle / 90.), abs(angle) % 90  # 165 --> -1, 75
+    if remainder > 45: turns -= 1 * sign  # 75 --> -1 more turn (-2 turns total)
+    angle += 90 * turns                   #        -15 degrees
+    image = np.rot90(image, k=turns)
+    height, width, _ = image.shape
+    matrix = cv2.getRotationMatrix2D((int(width / 2), int(height / 2)), angle, 1)
+    return cv2.warpAffine(image, matrix, (width, height))
+
 def image_filename():
     'Prepare filename with timestamp.'
     epoch = int(time())
@@ -51,7 +65,6 @@ def upload_path(filename):
 
 def usb_camera_photo():
     'Take a photo using a USB camera.'
-    import cv2
     # Settings
     camera_port = 0      # default USB camera port
     # image_width = 1600   # pixels
@@ -92,7 +105,15 @@ def usb_camera_photo():
     if ret:  # an image has been returned by the camera
         # Save the image to file
         filename = image_filename()
-        cv2.imwrite(upload_path(filename), image)
+        # Try to rotate the image
+        try:
+            final_image = rotate(image)
+        except:
+            final_image = image
+        else:
+            filename = 'rotated_' + filename
+        # Save the image to file
+        cv2.imwrite(upload_path(filename), final_image)
         print("Image saved: {}".format(upload_path(filename)))
     else:  # no image has been returned by the camera
         log("Problem getting image.", "error")
