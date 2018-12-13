@@ -5,6 +5,7 @@ Take a photo using a USB or Raspberry Pi camera.
 '''
 
 import os
+import sys
 from time import time, sleep
 import json
 import requests
@@ -105,6 +106,7 @@ def usb_camera_photo():
         print("Image saved: {}".format(upload_path(filename)))
     else:  # no image has been returned by the camera
         log("Problem getting image.", "error")
+        sys.exit(1)
 
 def rpi_camera_photo():
     'Take a photo using the Raspberry Pi Camera.'
@@ -117,8 +119,10 @@ def rpi_camera_photo():
             print("Image saved: {}".format(filename_path))
         else:
             log("Problem getting image.", "error")
+            sys.exit(1)
     except OSError:
         log("Raspberry Pi Camera not detected.", "error")
+        sys.exit(1)
 
 if __name__ == '__main__':
     try:
