@@ -11,13 +11,19 @@ import requests
 import numpy as np
 import cv2
 
+try:
+    from farmware_tools.env import Env
+except ImportError:
+    IMAGES_DIR = os.getenv('IMAGES_DIR')
+else:
+    IMAGES_DIR = Env().images_dir
 
-def farmware_api_url():
+def _farmware_api_url():
     major_version = int(os.getenv('FARMBOT_OS_VERSION', '0.0.0')[0])
     base_url = os.environ['FARMWARE_URL']
     return base_url + 'api/v1/' if major_version > 5 else base_url
 
-def log(message, message_type):
+def legacy_log(message, message_type):
     'Send a message to the log.'
     try:
         os.environ['FARMWARE_URL']
@@ -27,12 +33,21 @@ def log(message, message_type):
         log_message = '[take-photo] ' + str(message)
         headers = {
             'Authorization': 'bearer {}'.format(os.environ['FARMWARE_TOKEN']),
-            'content-type': "application/json"}
+            'content-type': 'application/json'}
         payload = json.dumps(
-            {"kind": "send_message",
-             "args": {"message": log_message, "message_type": message_type}})
-        requests.post(farmware_api_url() + 'celery_script',
+            {'kind': 'send_message',
+             'args': {'message': log_message, 'message_type': message_type}})
+        requests.post(_farmware_api_url() + 'celery_script',
                       data=payload, headers=headers)
+
+try:
+    from farmware_tools import device
+except ImportError:
+    log = legacy_log
+else:
+    def log(message, message_type):
+        'Send a log message.'
+        device.log('[take-photo] {}'.format(message), message_type)
 
 def rotate(image):
     'Rotate image if calibration data exists.'
@@ -54,11 +69,7 @@ def image_filename():
 
 def upload_path(filename):
     'Filename with path for uploading an image.'
-    try:
-        images_dir = os.environ['IMAGES_DIR']
-    except KeyError:
-        images_dir = '/tmp/images'
-    path = images_dir + os.sep + filename
+    path = (IMAGES_DIR or '/tmp/images') + os.sep + filename
     return path
 
 def usb_camera_photo():
@@ -69,12 +80,12 @@ def usb_camera_photo():
 
     # Check for camera
     if not os.path.exists('/dev/video' + str(camera_port)):
-        print("No camera detected at video{}.".format(camera_port))
+        print('No camera detected at video{}.'.format(camera_port))
         camera_port += 1
-        print("Trying video{}...".format(camera_port))
+        print('Trying video{}...'.format(camera_port))
         if not os.path.exists('/dev/video' + str(camera_port)):
-            print("No camera detected at video{}.".format(camera_port))
-            log("USB Camera not detected.", "error")
+            print('No camera detected at video{}.'.format(camera_port))
+            log('USB Camera not detected.', 'error')
 
     # Open the camera
     camera = cv2.VideoCapture(camera_port)
@@ -102,9 +113,9 @@ def usb_camera_photo():
             filename = 'rotated_' + filename
         # Save the image to file
         cv2.imwrite(upload_path(filename), final_image)
-        print("Image saved: {}".format(upload_path(filename)))
+        print('Image saved: {}'.format(upload_path(filename)))
     else:  # no image has been returned by the camera
-        log("Problem getting image.", "error")
+        log('Problem getting image.', 'error')
 
 def rpi_camera_photo():
     'Take a photo using the Raspberry Pi Camera.'
@@ -112,13 +123,13 @@ def rpi_camera_photo():
     try:
         filename_path = upload_path(image_filename())
         retcode = call(
-            ["raspistill", "-w", "640", "-h", "480", "-o", filename_path])
+            ['raspistill', '-w', '640', '-h', '480', '-o', filename_path])
         if retcode == 0:
-            print("Image saved: {}".format(filename_path))
+            print('Image saved: {}'.format(filename_path))
         else:
-            log("Problem getting image.", "error")
+            log('Problem getting image.', 'error')
     except OSError:
-        log("Raspberry Pi Camera not detected.", "error")
+        log('Raspberry Pi Camera not detected.', 'error')
 
 if __name__ == '__main__':
     try:
