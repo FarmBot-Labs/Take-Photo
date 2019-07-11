@@ -69,7 +69,10 @@ def image_filename():
 
 def upload_path(filename):
     'Filename with path for uploading an image.'
-    path = (IMAGES_DIR or '/tmp/images') + os.sep + filename
+    images_dir = IMAGES_DIR or '/tmp/images'
+    if not os.path.isdir(images_dir):
+        log('{} directory does not exist.'.format(images_dir), 'error')
+    path = images_dir + os.sep + filename
     return path
 
 def usb_camera_photo():
