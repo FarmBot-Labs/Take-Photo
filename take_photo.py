@@ -75,6 +75,21 @@ def upload_path(filename):
     path = images_dir + os.sep + filename
     return path
 
+def save_image(image):
+    'Save an image to file after attempting rotation.'
+    filename = image_filename()
+    # Try to rotate the image
+    try:
+        final_image = rotate(image)
+    except:
+        final_image = image
+    else:
+        filename = 'rotated_' + filename
+    # Save the image to file
+    filename_path = upload_path(filename)
+    cv2.imwrite(filename_path, final_image)
+    print('Image saved: {}'.format(filename_path))
+
 def usb_camera_photo():
     'Take a photo using a USB camera.'
     # Settings
@@ -106,17 +121,7 @@ def usb_camera_photo():
 
     # Output
     if ret:  # an image has been returned by the camera
-        filename = image_filename()
-        # Try to rotate the image
-        try:
-            final_image = rotate(image)
-        except:
-            final_image = image
-        else:
-            filename = 'rotated_' + filename
-        # Save the image to file
-        cv2.imwrite(upload_path(filename), final_image)
-        print('Image saved: {}'.format(upload_path(filename)))
+        save_image(image)
     else:  # no image has been returned by the camera
         log('Problem getting image.', 'error')
 
@@ -124,11 +129,13 @@ def rpi_camera_photo():
     'Take a photo using the Raspberry Pi Camera.'
     from subprocess import call
     try:
-        filename_path = upload_path(image_filename())
+        tempfile = upload_path('temporary')
         retcode = call(
-            ['raspistill', '-w', '640', '-h', '480', '-o', filename_path])
+            ['raspistill', '-w', '640', '-h', '480', '-o', tempfile])
         if retcode == 0:
-            print('Image saved: {}'.format(filename_path))
+            image = cv2.imread(tempfile)
+            os.remove(tempfile)
+            save_image(image)
         else:
             log('Problem getting image.', 'error')
     except OSError:
