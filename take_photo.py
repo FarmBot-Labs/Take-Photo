@@ -5,11 +5,11 @@ Take a photo using a USB or Raspberry Pi camera.
 '''
 
 import os
+import sys
 from time import time, sleep
 import json
 import requests
 import numpy as np
-import cv2
 
 try:
     from farmware_tools.env import Env
@@ -48,6 +48,12 @@ else:
     def log(message, message_type):
         'Send a log message.'
         device.log('[take-photo] {}'.format(message), message_type)
+
+try:
+    import cv2
+except ImportError:
+    log('OpenCV import error.', 'error')
+    sys.exit(1)
 
 def rotate(image):
     'Rotate image if calibration data exists.'
