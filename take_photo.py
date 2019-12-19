@@ -148,12 +148,11 @@ def rpi_camera_photo():
         log('Raspberry Pi Camera not detected.', 'error')
 
 if __name__ == '__main__':
-    try:
-        CAMERA = os.environ['camera']
-    except (KeyError, ValueError):
-        CAMERA = 'USB'  # default camera
+    CAMERA = os.getenv('camera', 'USB').upper()
 
-    if 'RPI' in CAMERA:
+    if 'NONE' in CAMERA:
+        log('No camera selected. Choose a camera on the device page.', 'error')
+    elif 'RPI' in CAMERA:
         rpi_camera_photo()
     else:
         usb_camera_photo()
