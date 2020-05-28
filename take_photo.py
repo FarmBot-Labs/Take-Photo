@@ -139,6 +139,9 @@ def usb_camera_photo():
     image_width = 640    # pixels
     image_height = 480   # pixels
 
+    subprocess.call(['rmmod', 'uvcvideo'])
+    subprocess.call(['modprobe', 'uvcvideo', 'quirks=128', 'nodrop=1', 'timeout=6000'])
+
     # Start timer
     start = time()
 
@@ -160,6 +163,16 @@ def usb_camera_photo():
         print_with_time('Not at ports 0-{}.'.format(max_port_num), start)
         log('USB Camera not detected.', 'error')
         return
+
+    # Close process using camera (if open)
+    try:
+        pid = subprocess.check_output(['fuser', camera_path])
+    except subprocess.CalledProcessError:
+        pass
+    else:
+        print_with_time(
+            '{} in use. Attempting to close...'.format(camera_path), start)
+        subprocess.call(['kill', '-9', pid])
 
     # Open the camera
     try:
