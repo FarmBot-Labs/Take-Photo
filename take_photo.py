@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+
 '''Take a photo.
 
 Take a photo using a USB or Raspberry Pi camera.
@@ -11,6 +12,27 @@ import json
 import subprocess
 import requests
 import numpy as np
+
+# start timer
+START_TIME = time()
+
+
+def verbose_log(text):
+    'Print text with time elapsed since start.'
+    elapsed = round(time() - START_TIME, 4)
+    timed_log = '[{:>8}] {}'.format(elapsed, text)
+    log_level = os.getenv('take_photo_logging', '').lower()
+    if 'quiet' in log_level:
+        return
+    if 'verbose' not in log_level:
+        print(timed_log)
+        return
+    log_content = timed_log if 'timed' in log_level else text
+    try:
+        log(log_content, 'debug')
+    except NameError:
+        pass
+
 
 try:
     from farmware_tools.env import Env
@@ -45,20 +67,28 @@ def legacy_log(message, message_type):
 
 
 try:
+    verbose_log('Importing farmware_tools...')
     from farmware_tools import device
 except ImportError:
+    verbose_log('farmware_tools import error. Using legacy logger.')
     log = legacy_log
 else:
+    verbose_log('Import complete.')
+
     def log(message, message_type):
         'Send a log message.'
         device.log('[take-photo] {}'.format(message), message_type)
 
 
 try:
+    verbose_log('Importing opencv...')
+    os.environ['OPENCV_VIDEOIO_DEBUG'] = '1'
     import cv2
 except ImportError:
     log('OpenCV import error.', 'error')
     sys.exit(1)
+else:
+    verbose_log('Import complete.')
 
 
 def rotate(image):
@@ -90,42 +120,36 @@ def upload_path(filename):
     return path
 
 
-def save_image(image, start_time=None):
+def save_image(image):
     'Save an image to file after attempting rotation.'
     filename = image_filename()
     # Try to rotate the image
     try:
+        verbose_log('Considering rotation...')
         final_image = rotate(image)
     except:
+        verbose_log('Did not rotate image.')
         final_image = image
     else:
+        verbose_log('Rotated image.')
         filename = 'rotated_' + filename
     # Save the image to file
     filename_path = upload_path(filename)
     cv2.imwrite(filename_path, final_image)
-    print_with_time('Image saved: {}'.format(filename_path), start_time)
+    verbose_log('Image saved: {}'.format(filename_path))
 
 
-def print_with_time(text, start_time=None):
-    'Print text with time elapsed.'
-    if start_time is None:
-        print(text)
-    else:
-        elapsed = round(time() - start_time, 4)
-        print('[{:>8}] {}'.format(elapsed, text))
-
-
-def _capture_usb_image(camera, start_time):
+def _capture_usb_image(camera):
     try:
         return camera.read()
     except Exception as error:
-        print_with_time(error, start_time)
+        verbose_log(error)
         log('Image capture error.', 'error')
         return 0, None
 
 
-def _log_no_image(start_time):
-    print_with_time('No image.', start_time)
+def _log_no_image():
+    verbose_log('No image.')
     log('Problem getting image.', 'error')
 
 
@@ -139,42 +163,64 @@ def usb_camera_photo():
     image_width = 640    # pixels
     image_height = 480   # pixels
 
-    # Start timer
-    start = time()
-
     # Check for camera
     camera_detected = False
     while camera_port <= max_port_num:
         camera_path = '/dev/video' + str(camera_port)
         if camera_port > 0:  # unexpected port
-            print_with_time('Checking for {}...'.format(camera_path), start)
+            verbose_log('Checking for {}...'.format(camera_path))
         if os.path.exists(camera_path):
-            print_with_time('Found {}'.format(camera_path), start)
+            verbose_log('Found {}'.format(camera_path))
             camera_detected = True
             break
         else:
-            print_with_time(
-                'No camera detected at {}.'.format(camera_path), start)
+            verbose_log('No camera detected at {}.'.format(camera_path))
             camera_port += 1
     if not camera_detected:
-        print_with_time('Not at ports 0-{}.'.format(max_port_num), start)
+        verbose_log('Not at ports 0-{}.'.format(max_port_num))
         log('USB Camera not detected.', 'error')
         return
 
+    # Close process using camera (if open)
+    try:
+        MissingError = FileNotFoundError
+    except NameError:
+        MissingError = OSError
+    try:
+        pids = subprocess.check_output(['fuser', camera_path])
+    except MissingError:
+        verbose_log('Unable to check if busy.')
+    except subprocess.CalledProcessError:
+        verbose_log('Camera not busy.')
+    else:
+        verbose_log('{} busy. Attempting to close...'.format(camera_path))
+        for pid in pids.strip().split(b' '):
+            subprocess.call(['kill', '-9', pid])
+
     # Open the camera
+    verbose_log('Opening camera...')
     try:
         camera = cv2.VideoCapture(camera_port)
     except Exception as error:
-        print_with_time(error, start)
+        verbose_log(error)
+    try:
+        backend = camera.getBackendName()
+    except NameError:
+        backend = 'not available'
+    verbose_log('using backend: ' + backend)
     sleep(0.1)
-    if not camera.isOpened():
-        print_with_time('Camera is not open.', start)
+    try:
+        camera_open = camera.isOpened()
+    except NameError:
+        camera_open = False
+    if not camera_open:
+        verbose_log('Camera is not open.')
         log('Could not connect to camera.', 'error')
         return
-    print_with_time('Camera opened successfully.', start)
+    verbose_log('Camera opened successfully.')
 
     # Set image size
-    print_with_time('Adjusting image with test captures...', start)
+    verbose_log('Adjusting image with test captures...')
     try:
         camera.set(cv2.CAP_PROP_FRAME_WIDTH, image_width)
         camera.set(cv2.CAP_PROP_FRAME_HEIGHT, image_height)
@@ -182,43 +228,47 @@ def usb_camera_photo():
         camera.set(cv2.cv.CV_CAP_PROP_FRAME_WIDTH, image_width)
         camera.set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT, image_height)
     # Capture test frame
-    ret, _ = _capture_usb_image(camera, start)
+    ret, _ = _capture_usb_image(camera)
     if not ret:
         camera.release()
-        _log_no_image(start)
+        _log_no_image()
         return
+    verbose_log('First test frame captured.')
     # Let camera adjust
     failed_attempts = 0
     for _ in range(discard_frames):
         grab_ret = camera.grab()
         if not grab_ret:
-            print_with_time('Could not get frame.', start)
+            verbose_log('Could not get frame.')
             failed_attempts += 1
         if failed_attempts >= max_attempts:
             break
         sleep(0.1)
 
     # Take a photo
-    print_with_time('Taking photo...', start)
-    ret, image = _capture_usb_image(camera, start)
+    verbose_log('Taking photo...')
+    ret, image = _capture_usb_image(camera)
 
     # Close the camera
     camera.release()
 
     # Output
     if ret:  # an image has been returned by the camera
-        save_image(image, start)
+        verbose_log('Photo captured.')
+        save_image(image)
     else:  # no image has been returned by the camera
-        _log_no_image(start)
+        _log_no_image()
 
 
 def rpi_camera_photo():
     'Take a photo using the Raspberry Pi Camera.'
     try:
         tempfile = upload_path('temporary')
+        verbose_log('Taking photo with Raspberry Pi camera...')
         retcode = subprocess.call(
             ['raspistill', '-w', '640', '-h', '480', '-o', tempfile])
         if retcode == 0:
+            verbose_log('Image captured.')
             image = cv2.imread(tempfile)
             os.remove(tempfile)
             save_image(image)
@@ -228,7 +278,8 @@ def rpi_camera_photo():
         log('Raspberry Pi Camera not detected.', 'error')
 
 
-if __name__ == '__main__':
+def take_photo():
+    'Take a photo.'
     CAMERA = os.getenv('camera', 'USB').upper()
 
     if 'NONE' in CAMERA:
@@ -237,3 +288,7 @@ if __name__ == '__main__':
         rpi_camera_photo()
     else:
         usb_camera_photo()
+
+
+if __name__ == '__main__':
+    take_photo()
