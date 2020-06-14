@@ -5,27 +5,35 @@
 Take a photo using a USB or Raspberry Pi camera.
 '''
 
+from __future__ import print_function
 import os
 import sys
 from time import time, sleep
 import json
 import subprocess
-import requests
-import numpy as np
 
 # start timer
 START_TIME = time()
 
+import requests
+import numpy as np
 
-def verbose_log(text):
+FIRST_IMPORTS_COMPLETE_TIME = time()
+
+
+def verbose_log(text, time_override=None):
     'Print text with time elapsed since start.'
-    elapsed = round(time() - START_TIME, 4)
+    now = time_override if time_override is not None else time()
+    elapsed = round(now - START_TIME, 4)
     timed_log = '[{:>8}] {}'.format(elapsed, text)
     log_level = os.getenv('take_photo_logging', '').lower()
     if 'quiet' in log_level:
         return
     if 'verbose' not in log_level:
-        print(timed_log)
+        try:
+            print(timed_log, flush=True)
+        except TypeError:
+            print(timed_log)
         return
     log_content = timed_log if 'timed' in log_level else text
     try:
@@ -67,28 +75,33 @@ def legacy_log(message, message_type):
 
 
 try:
-    verbose_log('Importing farmware_tools...')
+    ft_import_start_msg = 'Importing Farmware Tools...'
+    FT_IMPORT_START_TIME = time()
     from farmware_tools import device
 except ImportError:
-    verbose_log('farmware_tools import error. Using legacy logger.')
+    ft_import_result_msg = 'farmware_tools import error. Using legacy logger.'
     log = legacy_log
 else:
-    verbose_log('Import complete.')
+    ft_import_result_msg = 'Farmware Tools import complete.'
 
     def log(message, message_type):
         'Send a log message.'
         device.log('[take-photo] {}'.format(message), message_type)
 
 
+verbose_log('First imports complete.', FIRST_IMPORTS_COMPLETE_TIME)
+verbose_log(ft_import_start_msg, FT_IMPORT_START_TIME)
+verbose_log(ft_import_result_msg)
+
 try:
-    verbose_log('Importing opencv...')
+    verbose_log('Importing OpenCV...')
     os.environ['OPENCV_VIDEOIO_DEBUG'] = '1'
     import cv2
 except ImportError:
     log('OpenCV import error.', 'error')
     sys.exit(1)
 else:
-    verbose_log('Import complete.')
+    verbose_log('OpenCV import complete.')
 
 
 def rotate(image):
