@@ -182,6 +182,7 @@ class TakePhotoTest(unittest.TestCase):
         output = read_output_file(self.outfile)
         self.assertFalse('[ ' in output)
 
+    @mock.patch('os.listdir', mock.Mock(side_effect=lambda _: ['video0']))
     @mock.patch('os.path.exists', mock.Mock())
     @mock.patch('cv2.VideoCapture', _prepare_mock_capture())
     def test_capture_success(self):
@@ -193,6 +194,17 @@ class TakePhotoTest(unittest.TestCase):
         self.assertTrue('saved' in output)
         self.assertTrue('directory does not exist' in output)
 
+    @mock.patch('os.listdir', mock.Mock(
+        side_effect=lambda _: ['video0', 'video1', 'video2']))
+    def test_not_at_port(self):
+        'Test not at video ports.'
+        del os.environ['IMAGES_DIR']
+        re_import()
+        take_photo.take_photo()
+        output = read_output_file(self.outfile)
+        self.assertFalse('saved' in output)
+
+    @mock.patch('os.listdir', mock.Mock(side_effect=lambda _: ['video0']))
     @mock.patch('os.path.exists', mock.Mock())
     @mock.patch('cv2.VideoCapture', _prepare_mock_capture(raise_open=True))
     def test_camera_open_error(self):
@@ -203,6 +215,7 @@ class TakePhotoTest(unittest.TestCase):
         self.assertTrue('mock error' in output)
         self.assertTrue('could not connect' in output)
 
+    @mock.patch('os.listdir', mock.Mock(side_effect=lambda _: ['video0']))
     @mock.patch('os.path.exists', mock.Mock())
     @mock.patch('cv2.VideoCapture', _prepare_mock_capture(raise_backend=True))
     def test_camera_get_backend_error(self):
@@ -212,6 +225,7 @@ class TakePhotoTest(unittest.TestCase):
         output = read_output_file(self.outfile)
         self.assertTrue('not available' in output)
 
+    @mock.patch('os.listdir', mock.Mock(side_effect=lambda _: ['video0']))
     @mock.patch('os.path.exists', mock.Mock())
     @mock.patch('cv2.VideoCapture', _prepare_mock_capture(raise_read=True))
     def test_camera_read_error(self):
@@ -222,6 +236,7 @@ class TakePhotoTest(unittest.TestCase):
         self.assertTrue('mock error' in output)
         self.assertTrue('image capture error' in output)
 
+    @mock.patch('os.listdir', mock.Mock(side_effect=lambda _: ['video0']))
     @mock.patch('os.path.exists', mock.Mock())
     @mock.patch('subprocess.check_output',
                 mock.Mock(side_effect=_prepare_fuser_mock(missing=True)))
@@ -233,6 +248,7 @@ class TakePhotoTest(unittest.TestCase):
         output = read_output_file(self.outfile)
         self.assertTrue('unable to check' in output)
 
+    @mock.patch('os.listdir', mock.Mock(side_effect=lambda _: ['video0']))
     @mock.patch('os.path.exists', mock.Mock())
     @mock.patch('subprocess.check_output',
                 mock.Mock(side_effect=_prepare_fuser_mock(busy=True)))
@@ -244,6 +260,7 @@ class TakePhotoTest(unittest.TestCase):
         output = read_output_file(self.outfile)
         self.assertTrue('attempting to close' in output)
 
+    @mock.patch('os.listdir', mock.Mock(side_effect=lambda _: ['video0']))
     @mock.patch('os.path.exists', mock.Mock())
     @mock.patch('cv2.VideoCapture', _prepare_mock_capture(isOpened=False))
     def test_camera_not_open(self):
@@ -253,6 +270,7 @@ class TakePhotoTest(unittest.TestCase):
         output = read_output_file(self.outfile)
         self.assertTrue('could not connect' in output)
 
+    @mock.patch('os.listdir', mock.Mock(side_effect=lambda _: ['video0']))
     @mock.patch('os.path.exists', mock.Mock())
     @mock.patch('cv2.VideoCapture',
                 _prepare_mock_capture(read_return=(False, None)))
@@ -263,6 +281,7 @@ class TakePhotoTest(unittest.TestCase):
         output = read_output_file(self.outfile)
         self.assertTrue('no image' in output)
 
+    @mock.patch('os.listdir', mock.Mock(side_effect=lambda _: ['video0']))
     @mock.patch('os.path.exists', mock.Mock())
     @mock.patch('cv2.VideoCapture', _prepare_mock_capture(grab_return=False))
     def test_no_grab_image(self):
@@ -272,12 +291,26 @@ class TakePhotoTest(unittest.TestCase):
         output = read_output_file(self.outfile)
         self.assertTrue('could not get frame' in output)
 
+    @mock.patch('os.listdir', mock.Mock(side_effect=lambda _: ['video0']))
     @mock.patch('os.path.exists', mock.Mock())
     @mock.patch('os.path.isdir', mock.Mock())
     @mock.patch('cv2.VideoCapture', _prepare_mock_capture())
     def test_rotated(self):
         'Test image rotation.'
         os.environ['CAMERA_CALIBRATION_total_rotation_angle'] = '45'
+        re_import()
+        take_photo.take_photo()
+        output = read_output_file(self.outfile)
+        self.assertTrue('rotated' in output)
+        self.assertFalse('directory does not exist' in output)
+
+    @mock.patch('os.listdir', mock.Mock(side_effect=lambda _: ['video0']))
+    @mock.patch('os.path.exists', mock.Mock())
+    @mock.patch('os.path.isdir', mock.Mock())
+    @mock.patch('cv2.VideoCapture', _prepare_mock_capture())
+    def test_large_rotation(self):
+        'Test large image rotation.'
+        os.environ['CAMERA_CALIBRATION_total_rotation_angle'] = '75'
         re_import()
         take_photo.take_photo()
         output = read_output_file(self.outfile)

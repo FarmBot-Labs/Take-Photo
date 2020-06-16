@@ -9,7 +9,6 @@ from __future__ import print_function
 import os
 import sys
 from time import time, sleep
-import json
 import subprocess
 
 # start timer
@@ -42,14 +41,6 @@ def verbose_log(text, time_override=None):
         pass
 
 
-try:
-    from farmware_tools.env import Env
-except ImportError:
-    IMAGES_DIR = os.getenv('IMAGES_DIR')
-else:
-    IMAGES_DIR = Env().images_dir
-
-
 def _farmware_api_url():
     major_version = int(os.getenv('FARMBOT_OS_VERSION', '0.0.0')[0])
     base_url = os.environ['FARMWARE_URL']
@@ -67,22 +58,24 @@ def legacy_log(message, message_type):
         headers = {
             'Authorization': 'bearer {}'.format(os.environ['FARMWARE_TOKEN']),
             'content-type': 'application/json'}
-        payload = json.dumps(
-            {'kind': 'send_message',
-             'args': {'message': log_message, 'message_type': message_type}})
+        payload = {
+            'kind': 'send_message',
+            'args': {'message': log_message, 'message_type': message_type}}
         requests.post(_farmware_api_url() + 'celery_script',
-                      data=payload, headers=headers)
+                      json=payload, headers=headers)
 
 
 try:
     ft_import_start_msg = 'Importing Farmware Tools...'
     FT_IMPORT_START_TIME = time()
-    from farmware_tools import device
+    from farmware_tools import env, device
 except ImportError:
     ft_import_result_msg = 'farmware_tools import error. Using legacy logger.'
     log = legacy_log
+    IMAGES_DIR = os.getenv('IMAGES_DIR')
 else:
     ft_import_result_msg = 'Farmware Tools import complete.'
+    IMAGES_DIR = env.Env().images_dir
 
     def log(message, message_type):
         'Send a log message.'
@@ -176,8 +169,40 @@ def usb_camera_photo():
     image_width = 640    # pixels
     image_height = 480   # pixels
 
+    try:
+        MissingError = FileNotFoundError
+    except NameError:
+        MissingError = OSError
+
     # Check for camera
     camera_detected = False
+    # USB devices
+    try:
+        raw_usb_results = subprocess.check_output(['lsusb'])
+    except MissingError:
+        verbose_log('Unable to check USB devices.')
+        device_list_str = ''
+    except subprocess.CalledProcessError:
+        verbose_log('USB device check error.')
+        device_list_str = ''
+    else:
+        usb_results = raw_usb_results.decode().strip().split('\n')
+        usb_devices = [result.strip()[33:] for result in usb_results]
+        usb_list_str = '|'.join(usb_devices)
+        verbose_log('{} USB device entries detected: {}'.format(
+            len(usb_results), usb_list_str))
+        device_list_str = ' (Device list: {})'.format(usb_list_str)
+    # video ports
+    video_ports = [d for d in os.listdir('/dev') if d.startswith('video')]
+    port_list_str = ','.join(video_ports)
+    verbose_log('{} video ports detected: {}'.format(
+        len(video_ports), port_list_str))
+    if len(video_ports) < 1:
+        log('USB Camera not detected.{}'.format(device_list_str), 'error')
+        return
+    if len(video_ports) > max_port_num + 1:
+        verbose_log('Increasing max port number.')
+        max_port_num = len(video_ports) - 1
     while camera_port <= max_port_num:
         camera_path = '/dev/video' + str(camera_port)
         if camera_port > 0:  # unexpected port
@@ -191,14 +216,11 @@ def usb_camera_photo():
             camera_port += 1
     if not camera_detected:
         verbose_log('Not at ports 0-{}.'.format(max_port_num))
-        log('USB Camera not detected.', 'error')
+        log('USB Camera not detected. (Port list: {})'.format(
+            port_list_str), 'error')
         return
 
     # Close process using camera (if open)
-    try:
-        MissingError = FileNotFoundError
-    except NameError:
-        MissingError = OSError
     try:
         pids = subprocess.check_output(['fuser', camera_path])
     except MissingError:
