@@ -240,7 +240,7 @@ def usb_camera_photo():
         verbose_log(error)
     try:
         backend = camera.getBackendName()
-    except NameError:
+    except (AttributeError, NameError):
         backend = 'not available'
     verbose_log('using backend: ' + backend)
     sleep(0.1)
