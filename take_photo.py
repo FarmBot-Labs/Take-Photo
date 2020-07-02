@@ -97,6 +97,12 @@ else:
     verbose_log('OpenCV import complete.')
 
 
+try:
+    MissingError = FileNotFoundError
+except NameError:
+    MissingError = OSError
+
+
 def rotate(image):
     'Rotate image if calibration data exists.'
     angle = float(os.environ['CAMERA_CALIBRATION_total_rotation_angle'])
@@ -145,6 +151,71 @@ def save_image(image):
     verbose_log('Image saved: {}'.format(filename_path))
 
 
+def _get_usb_device_list():
+    try:
+        raw_usb_results = subprocess.check_output(['lsusb'])
+    except MissingError:
+        verbose_log('Unable to check USB devices.')
+        device_list_str = ''
+    except subprocess.CalledProcessError:
+        verbose_log('USB device check error.')
+        device_list_str = ''
+    else:
+        usb_results = raw_usb_results.decode().strip().split('\n')
+        usb_devices = [result.strip()[28:] for result in usb_results]
+        usb_list_str = '|'.join(usb_devices)
+        verbose_log('{} USB device entries detected: {}'.format(
+            len(usb_results), usb_list_str))
+        device_list_str = ' (Device list: {})'.format(usb_list_str)
+    return device_list_str
+
+
+def _open_camera(port):
+    verbose_log('Opening camera...')
+    try:
+        camera = cv2.VideoCapture(port)
+    except Exception as error:
+        verbose_log(error)
+    try:
+        backend = camera.getBackendName()
+    except (AttributeError, NameError):
+        backend = 'not available'
+    verbose_log('using backend: ' + backend)
+    sleep(0.1)
+    try:
+        camera_open = camera.isOpened()
+    except NameError:
+        camera_open = False
+    if not camera_open:
+        verbose_log('Camera is not open.')
+        log('Could not connect to camera.', 'error')
+        return
+    verbose_log('Camera opened successfully.')
+    return camera
+
+
+def _adjust_settings(camera, image_width, image_height):
+    try:
+        camera.set(cv2.CAP_PROP_FRAME_WIDTH, image_width)
+        camera.set(cv2.CAP_PROP_FRAME_HEIGHT, image_height)
+    except AttributeError:
+        camera.set(cv2.cv.CV_CAP_PROP_FRAME_WIDTH, image_width)
+        camera.set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT, image_height)
+
+
+def _check_camera_availability(camera_path):
+    try:
+        pids = subprocess.check_output(['fuser', camera_path])
+    except MissingError:
+        verbose_log('Unable to check if busy.')
+    except subprocess.CalledProcessError:
+        verbose_log('Camera not busy.')
+    else:
+        verbose_log('{} busy. Attempting to close...'.format(camera_path))
+        for pid in pids.strip().split(b' '):
+            subprocess.call(['kill', '-9', pid])
+
+
 def _capture_usb_image(camera):
     try:
         return camera.read()
@@ -169,111 +240,53 @@ def usb_camera_photo():
     image_width = 640    # pixels
     image_height = 480   # pixels
 
-    try:
-        MissingError = FileNotFoundError
-    except NameError:
-        MissingError = OSError
-
-    # Check for camera
-    camera_detected = False
-    # USB devices
-    try:
-        raw_usb_results = subprocess.check_output(['lsusb'])
-    except MissingError:
-        verbose_log('Unable to check USB devices.')
-        device_list_str = ''
-    except subprocess.CalledProcessError:
-        verbose_log('USB device check error.')
-        device_list_str = ''
-    else:
-        usb_results = raw_usb_results.decode().strip().split('\n')
-        usb_devices = [result.strip()[33:] for result in usb_results]
-        usb_list_str = '|'.join(usb_devices)
-        verbose_log('{} USB device entries detected: {}'.format(
-            len(usb_results), usb_list_str))
-        device_list_str = ' (Device list: {})'.format(usb_list_str)
-    # video ports
+    # Check USB devices for camera
+    device_list_str = _get_usb_device_list()
+    # Check video ports for camera
     video_ports = [d for d in os.listdir('/dev') if d.startswith('video')]
-    port_list_str = ','.join(video_ports)
     verbose_log('{} video ports detected: {}'.format(
-        len(video_ports), port_list_str))
+        len(video_ports), ','.join(video_ports)))
     if len(video_ports) < 1:
         log('USB Camera not detected.{}'.format(device_list_str), 'error')
         return
-    if len(video_ports) > max_port_num + 1:
-        verbose_log('Increasing max port number.')
-        max_port_num = len(video_ports) - 1
+    max_port_num = len(video_ports) - 1
+    verbose_log('Adjusting max port number to {}.'.format(max_port_num))
+    ret = False
     while camera_port <= max_port_num:
         camera_path = '/dev/video' + str(camera_port)
-        if camera_port > 0:  # unexpected port
-            verbose_log('Checking for {}...'.format(camera_path))
-        if os.path.exists(camera_path):
-            verbose_log('Found {}'.format(camera_path))
-            camera_detected = True
-            break
-        else:
-            verbose_log('No camera detected at {}.'.format(camera_path))
+        verbose_log('Trying {}'.format(camera_path))
+        if not os.path.exists(camera_path):
+            verbose_log('{} missing'.format(camera_path))
             camera_port += 1
-    if not camera_detected:
-        verbose_log('Not at ports 0-{}.'.format(max_port_num))
-        log('USB Camera not detected. (Port list: {})'.format(
-            port_list_str), 'error')
-        return
+            continue
 
-    # Close process using camera (if open)
-    try:
-        pids = subprocess.check_output(['fuser', camera_path])
-    except MissingError:
-        verbose_log('Unable to check if busy.')
-    except subprocess.CalledProcessError:
-        verbose_log('Camera not busy.')
-    else:
-        verbose_log('{} busy. Attempting to close...'.format(camera_path))
-        for pid in pids.strip().split(b' '):
-            subprocess.call(['kill', '-9', pid])
+        # Close process using camera (if open)
+        _check_camera_availability(camera_path)
 
-    # Open the camera
-    verbose_log('Opening camera...')
-    try:
-        camera = cv2.VideoCapture(camera_port)
-    except Exception as error:
-        verbose_log(error)
-    try:
-        backend = camera.getBackendName()
-    except (AttributeError, NameError):
-        backend = 'not available'
-    verbose_log('using backend: ' + backend)
-    sleep(0.1)
-    try:
-        camera_open = camera.isOpened()
-    except NameError:
-        camera_open = False
-    if not camera_open:
-        verbose_log('Camera is not open.')
-        log('Could not connect to camera.', 'error')
-        return
-    verbose_log('Camera opened successfully.')
+        # Open the camera
+        camera = _open_camera(camera_port)
+        if camera is None:
+            return
 
-    # Set image size
-    verbose_log('Adjusting image with test captures...')
-    try:
-        camera.set(cv2.CAP_PROP_FRAME_WIDTH, image_width)
-        camera.set(cv2.CAP_PROP_FRAME_HEIGHT, image_height)
-    except AttributeError:
-        camera.set(cv2.cv.CV_CAP_PROP_FRAME_WIDTH, image_width)
-        camera.set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT, image_height)
-    # Capture test frame
-    ret, _ = _capture_usb_image(camera)
+        verbose_log('Adjusting image with test captures...')
+        # Set image size
+        _adjust_settings(camera, image_width, image_height)
+        # Capture test frame
+        ret, _ = _capture_usb_image(camera)
+        if not ret:
+            camera.release()
+            verbose_log('Couldn\'t get frame from {}'.format(camera_path))
+            camera_port += 1
+            continue
+        break
     if not ret:
-        camera.release()
         _log_no_image()
         return
     verbose_log('First test frame captured.')
     # Let camera adjust
     failed_attempts = 0
     for _ in range(discard_frames):
-        grab_ret = camera.grab()
-        if not grab_ret:
+        if not camera.grab():
             verbose_log('Could not get frame.')
             failed_attempts += 1
         if failed_attempts >= max_attempts:
