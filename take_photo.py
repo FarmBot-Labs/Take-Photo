@@ -301,7 +301,7 @@ def rpi_camera_photo():
         tempfile = upload_path('temporary')
         verbose_log('Taking photo with Raspberry Pi camera...')
         retcode = subprocess.call(
-            ['raspistill', '-w', '640', '-h', '480', '-o', tempfile])
+            ['raspistill', '-md', '3', '-o', tempfile])
         if retcode == 0:
             verbose_log('Image captured.')
             image = cv2.imread(tempfile)
