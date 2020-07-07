@@ -11,6 +11,53 @@ import sys
 from time import time, sleep
 import subprocess
 
+
+def get_camera_selection():
+    'Fetch camera type selected.'
+    return os.getenv('camera', 'USB').upper()
+
+
+def rotation_disabled():
+    'Check if rotation is disabled via environment variable.'
+    return '1' in os.getenv('take_photo_disable_rotation_adjustment', '0')
+
+
+def std_print(text):
+    'Print.'
+    if not 'quiet' in os.getenv('take_photo_logging', '').lower():
+        try:
+            print(text, flush=True)
+        except TypeError:
+            print(text)
+
+def usb_camera_call(savepath):
+    'Call fswebcam.'
+    args = ['fswebcam', '-r', '640x480', '--no-banner', savepath]
+    std_print('Calling `{}`...'.format(' '.join(args)))
+    return subprocess.call(args)
+
+
+def rpi_photo_call(savepath):
+    'Call raspistill.'
+    args = ['raspistill', '-md', '3', '-o', savepath]
+    std_print('Calling `{}`...'.format(' '.join(args)))
+    return subprocess.call(args)
+
+
+# Takes photo and exits if rotation was disabled via environment variable.
+# Without imports, logs, or processing, this is a much quicker path.
+if rotation_disabled():
+    SAVEPATH = '/tmp/images/{}.jpg'.format(int(time()))
+    CAMERA = get_camera_selection()
+    if 'NONE' in CAMERA:
+        std_print('Camera disabled.')
+    elif 'RPI' in CAMERA:
+        rpi_photo_call(SAVEPATH)
+    else:
+        usb_camera_call(SAVEPATH)
+    sys.exit(0)
+
+
 # start timer
 START_TIME = time()
 
@@ -29,10 +76,7 @@ def verbose_log(text, time_override=None):
     if 'quiet' in log_level:
         return
     if 'verbose' not in log_level:
-        try:
-            print(timed_log, flush=True)
-        except TypeError:
-            print(timed_log)
+        std_print(timed_log)
         return
     log_content = timed_log if 'timed' in log_level else text
     try:
@@ -92,7 +136,7 @@ try:
     import cv2
 except ImportError:
     log('OpenCV import error.', 'error')
-    sys.exit(1)
+    sys.exit(0)
 else:
     verbose_log('OpenCV import complete.')
 
@@ -313,8 +357,7 @@ def rpi_camera_photo():
     try:
         tempfile = upload_path('temporary')
         verbose_log('Taking photo with Raspberry Pi camera...')
-        retcode = subprocess.call(
-            ['raspistill', '-md', '3', '-o', tempfile])
+        retcode = rpi_photo_call(tempfile)
         if retcode == 0:
             verbose_log('Image captured.')
             image = cv2.imread(tempfile)
@@ -328,7 +371,7 @@ def rpi_camera_photo():
 
 def take_photo():
     'Take a photo.'
-    CAMERA = os.getenv('camera', 'USB').upper()
+    CAMERA = get_camera_selection()
 
     if 'NONE' in CAMERA:
         log('No camera selected. Choose a camera on the device page.', 'error')

@@ -16,11 +16,6 @@ before_script:
 script:
   - if [[ $OPENCV_VERSION != '0' ]]; then python -c 'import cv2; print("OpenCV " + cv2.__version__)'; fi
   - python -c 'import numpy; print("NumPy " + numpy.__version__)'
-  - python -m coverage run --source . --omit=tests.py -m unittest discover -v
-matrix:
-  allow_failures:
-    - env: OPENCV_VERSION=0 FARMWARE_TOOLS=y
-      python: "2.7"
-    - env: OPENCV_VERSION=0 FARMWARE_TOOLS=y
-      python: "3.8"
+  - if [[ $OPENCV_VERSION != '0' ]]; then python -m coverage run --source . --omit=tests.py -m unittest discover -v; fi
+  - if [[ $OPENCV_VERSION == '0' ]]; then python -m coverage run --source . --omit=tests.py -m unittest tests.TakePhotoTest.test_opencv_missing; fi
 after_success: coveralls

@@ -14,6 +14,12 @@ except ImportError:
 else:
     FT_IMPORTED = True
 try:
+    import cv2
+except ImportError:
+    CV2_IMPORTED = False
+else:
+    CV2_IMPORTED = True
+try:
     from unittest import mock
 except ImportError:
     import mock
@@ -40,6 +46,7 @@ ENVS = [
     'take_photo_logging',
     'camera',
     'IMAGES_DIR',
+    'take_photo_disable_rotation_adjustment',
     'CAMERA_CALIBRATION_total_rotation_angle',
     'FARMBOT_OS_VERSION',
     'FARMWARE_URL',
@@ -357,6 +364,59 @@ class TakePhotoTest(unittest.TestCase):
         output = read_output_file(self.outfile)
         self.assertTrue('raspberry pi' in output)
         self.assertTrue('problem' in output)
+
+    @mock.patch('subprocess.call', mock.Mock(side_effect=lambda _: 0))
+    def test_quick_rpi_camera(self):
+        'Test quick capture with rpi camera selection.'
+        os.environ['take_photo_disable_rotation_adjustment'] = '1'
+        os.environ['camera'] = 'rpi'
+        with self.assertRaises(SystemExit):
+            re_import()
+        output = read_output_file(self.outfile)
+        self.assertTrue('raspistill' in output)
+        self.assertFalse('fswebcam' in output)
+        self.assertFalse('disabled' in output)
+
+    @mock.patch('subprocess.call', mock.Mock(side_effect=lambda _: 0))
+    def test_quick_usb_camera(self):
+        'Test quick capture with usb camera selection.'
+        os.environ['take_photo_disable_rotation_adjustment'] = '1'
+        os.environ['camera'] = 'usb'
+        with self.assertRaises(SystemExit):
+            re_import()
+        output = read_output_file(self.outfile)
+        self.assertFalse('raspistill' in output)
+        self.assertTrue('fswebcam' in output)
+        self.assertFalse('disabled' in output)
+
+    def test_quick_none_camera(self):
+        'Test quick capture with none camera selection.'
+        os.environ['take_photo_disable_rotation_adjustment'] = '1'
+        os.environ['camera'] = 'none'
+        with self.assertRaises(SystemExit):
+            re_import()
+        output = read_output_file(self.outfile)
+        self.assertFalse('raspistill' in output)
+        self.assertFalse('fswebcam' in output)
+        self.assertTrue('disabled' in output)
+
+    def test_quick_none_camera_quiet(self):
+        'Test quick capture with none camera selection: quiet.'
+        os.environ['take_photo_disable_rotation_adjustment'] = '1'
+        os.environ['camera'] = 'none'
+        os.environ['take_photo_logging'] = 'quiet'
+        with self.assertRaises(SystemExit):
+            re_import()
+        output = read_output_file(self.outfile)
+        self.assertFalse('disabled' in output)
+
+    @unittest.skipIf(CV2_IMPORTED, '')
+    def test_opencv_missing(self):
+        'Test for cv2 import error.'
+        with self.assertRaises(SystemExit):
+            re_import()
+        output = read_output_file(self.outfile)
+        self.assertTrue('import error' in output)
 
     def tearDown(self):
         self.outfile.close()
