@@ -30,9 +30,10 @@ def std_print(text):
         except TypeError:
             print(text)
 
+
 def usb_camera_call(savepath):
     'Call fswebcam.'
-    args = ['fswebcam', '-r', '640x480', '--no-banner', savepath]
+    args = ['fswebcam', '-r', '640x480', '-S', '10', '--no-banner', savepath]
     std_print('Calling `{}`...'.format(' '.join(args)))
     return subprocess.call(args)
 
