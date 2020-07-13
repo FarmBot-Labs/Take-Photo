@@ -5,6 +5,7 @@
 import os
 import sys
 import unittest
+os.environ['take_photo_disable_rotation_adjustment'] = '0'
 import take_photo
 import numpy as np
 try:
@@ -51,6 +52,8 @@ ENVS = [
     'FARMBOT_OS_VERSION',
     'FARMWARE_URL',
     'FARMWARE_TOKEN',
+    'FARMWARE_API_V2_REQUEST_PIPE',
+    'FARMWARE_API_V2_RESPONSE_PIPE',
 ]
 
 
@@ -127,6 +130,21 @@ def _prepare_mock_capture(**kwargs):
     return mocked_video_capture
 
 
+def _prepare_mock_socket(**_kwargs):
+    def mocked_socket(*_args):
+        class MockSocket():
+            @staticmethod
+            def connect(_): return
+            @staticmethod
+            def sendall(req): print(req)
+            @staticmethod
+            def recv(_): return
+            @staticmethod
+            def close(): return
+        return MockSocket()
+    return mocked_socket
+
+
 class TakePhotoTest(unittest.TestCase):
     'Test Take Photo.'
 
@@ -137,6 +155,7 @@ class TakePhotoTest(unittest.TestCase):
             except KeyError:
                 pass
         os.environ['IMAGES_DIR'] = '/tmp'
+        os.environ['take_photo_disable_rotation_adjustment'] = '0'
         self.outfile = open(OUTPUT_FILENAME, 'w')
         sys.stdout = self.outfile
 
@@ -363,7 +382,7 @@ class TakePhotoTest(unittest.TestCase):
         take_photo.take_photo()
         output = read_output_file(self.outfile)
         self.assertTrue('raspberry pi' in output)
-        self.assertTrue('problem' in output)
+        self.assertTrue('not detected' in output)
 
     @mock.patch('subprocess.call', mock.Mock(side_effect=lambda _: 0))
     def test_quick_rpi_camera(self):
@@ -375,8 +394,9 @@ class TakePhotoTest(unittest.TestCase):
         output = read_output_file(self.outfile)
         self.assertTrue('raspistill' in output)
         self.assertFalse('fswebcam' in output)
-        self.assertFalse('disabled' in output)
+        self.assertFalse('no camera selected' in output)
 
+    @mock.patch('os.listdir', mock.Mock(side_effect=lambda _: ['video0']))
     @mock.patch('subprocess.call', mock.Mock(side_effect=lambda _: 0))
     def test_quick_usb_camera(self):
         'Test quick capture with usb camera selection.'
@@ -387,7 +407,20 @@ class TakePhotoTest(unittest.TestCase):
         output = read_output_file(self.outfile)
         self.assertFalse('raspistill' in output)
         self.assertTrue('fswebcam' in output)
-        self.assertFalse('disabled' in output)
+        self.assertFalse('no camera selected' in output)
+
+    @mock.patch('subprocess.call', mock.Mock(side_effect=lambda _: 0))
+    def test_quick_usb_camera_missing_port(self):
+        'Test quick capture with usb camera selection, video port missing.'
+        os.environ['take_photo_disable_rotation_adjustment'] = '1'
+        os.environ['camera'] = 'usb'
+        with self.assertRaises(SystemExit):
+            re_import()
+        output = read_output_file(self.outfile)
+        self.assertFalse('raspistill' in output)
+        self.assertFalse('fswebcam' in output)
+        self.assertFalse('no camera selected' in output)
+        self.assertTrue('not detected' in output)
 
     def test_quick_none_camera(self):
         'Test quick capture with none camera selection.'
@@ -398,7 +431,22 @@ class TakePhotoTest(unittest.TestCase):
         output = read_output_file(self.outfile)
         self.assertFalse('raspistill' in output)
         self.assertFalse('fswebcam' in output)
-        self.assertTrue('disabled' in output)
+        self.assertTrue('no camera selected' in output)
+
+    @unittest.skipIf(sys.version_info[0] < 3, '')
+    @mock.patch('socket.socket', _prepare_mock_socket())
+    def test_quick_none_camera_with_log(self):
+        'Test quick capture with none camera selection and log.'
+        os.environ['FARMWARE_API_V2_REQUEST_PIPE'] = ''
+        os.environ['FARMWARE_API_V2_RESPONSE_PIPE'] = ''
+        os.environ['take_photo_disable_rotation_adjustment'] = '1'
+        os.environ['camera'] = 'none'
+        with self.assertRaises(SystemExit):
+            re_import()
+        output = read_output_file(self.outfile)
+        self.assertFalse('raspistill' in output)
+        self.assertFalse('fswebcam' in output)
+        self.assertTrue('no camera selected' in output)
 
     def test_quick_none_camera_quiet(self):
         'Test quick capture with none camera selection: quiet.'
@@ -408,7 +456,7 @@ class TakePhotoTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             re_import()
         output = read_output_file(self.outfile)
-        self.assertFalse('disabled' in output)
+        self.assertFalse('no camera selected' in output)
 
     @unittest.skipIf(CV2_IMPORTED, '')
     def test_opencv_missing(self):

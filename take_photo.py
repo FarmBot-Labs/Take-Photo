@@ -12,6 +12,36 @@ from time import time, sleep
 import subprocess
 
 
+CAMERA_DISABLED_MSG = 'No camera selected. Choose a camera on the device page.'
+
+
+def _log(text):
+    try:
+        import json, socket, struct
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        r = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.connect(os.environ['FARMWARE_API_V2_REQUEST_PIPE'])
+        r.connect(os.environ['FARMWARE_API_V2_RESPONSE_PIPE'])
+        message = bytes(json.dumps({
+            'kind': 'rpc_request', 'args': {'label': ''},
+            'body': [{
+                'kind': 'send_message',
+                'args': {'message': text, 'message_type': 'error'}}]}), 'utf-8')
+        s.sendall(struct.pack('!Hii', 0xFBFB, 0, len(message)) + message)
+        r.recv(10)
+    except (KeyError, TypeError):
+        std_print(text)
+    finally:
+        s.close()
+        r.close()
+
+
+try:
+    MissingError = FileNotFoundError
+except NameError:
+    MissingError = OSError
+
+
 def get_camera_selection():
     'Fetch camera type selected.'
     return os.getenv('camera', 'USB').upper()
@@ -19,7 +49,7 @@ def get_camera_selection():
 
 def rotation_disabled():
     'Check if rotation is disabled via environment variable.'
-    return '1' in os.getenv('take_photo_disable_rotation_adjustment', '0')
+    return '1' in os.getenv('take_photo_disable_rotation_adjustment', '1')
 
 
 def std_print(text):
@@ -31,32 +61,51 @@ def std_print(text):
             print(text)
 
 
+def get_video_port_list():
+    'Get available video ports from /dev.'
+    return [d for d in os.listdir('/dev') if d.startswith('video')]
+
+
 def usb_camera_call(savepath):
     'Call fswebcam.'
     args = ['fswebcam', '-r', '640x480', '-S', '10', '--no-banner', savepath]
     std_print('Calling `{}`...'.format(' '.join(args)))
-    return subprocess.call(args)
+    try:
+        return subprocess.call(args)
+    except MissingError:
+        return 1
 
 
 def rpi_photo_call(savepath):
     'Call raspistill.'
     args = ['raspistill', '-md', '3', '-o', savepath]
     std_print('Calling `{}`...'.format(' '.join(args)))
-    return subprocess.call(args)
+    try:
+        return subprocess.call(args)
+    except MissingError:
+        return 1
 
 
 # Takes photo and exits if rotation was disabled via environment variable.
 # Without imports, logs, or processing, this is a much quicker path.
 if rotation_disabled():
     SAVEPATH = '/tmp/images/{}.jpg'.format(int(time()))
-    CAMERA = get_camera_selection()
-    if 'NONE' in CAMERA:
-        std_print('Camera disabled.')
-    elif 'RPI' in CAMERA:
-        rpi_photo_call(SAVEPATH)
+    SELECTED_CAMERA = get_camera_selection()
+    return_code = 0
+    if 'NONE' in SELECTED_CAMERA:
+        _log(CAMERA_DISABLED_MSG)
+    elif 'RPI' in SELECTED_CAMERA:
+        return_code = rpi_photo_call(SAVEPATH)
     else:
-        usb_camera_call(SAVEPATH)
-    sys.exit(0)
+        ports = get_video_port_list()
+        if len(ports) < 1:
+            _log('USB Camera not detected.')
+            sys.exit(0)
+        return_code = usb_camera_call(SAVEPATH)
+    if return_code == 0:
+        sys.exit(0)
+    else:
+        std_print('command not found. Trying OpenCV...')
 
 
 # start timer
@@ -142,14 +191,10 @@ else:
     verbose_log('OpenCV import complete.')
 
 
-try:
-    MissingError = FileNotFoundError
-except NameError:
-    MissingError = OSError
-
-
 def rotate(image):
     'Rotate image if calibration data exists.'
+    if rotation_disabled():
+        raise KeyError('Rotation disabled.')
     angle = float(os.environ['CAMERA_CALIBRATION_total_rotation_angle'])
     sign = -1 if angle < 0 else 1
     turns, remainder = -int(angle / 90.), abs(angle) % 90  # 165 --> -1, 75
@@ -288,7 +333,7 @@ def usb_camera_photo():
     # Check USB devices for camera
     device_list_str = _get_usb_device_list()
     # Check video ports for camera
-    video_ports = [d for d in os.listdir('/dev') if d.startswith('video')]
+    video_ports = get_video_port_list()
     verbose_log('{} video ports detected: {}'.format(
         len(video_ports), ','.join(video_ports)))
     if len(video_ports) < 1:
@@ -355,18 +400,15 @@ def usb_camera_photo():
 
 def rpi_camera_photo():
     'Take a photo using the Raspberry Pi Camera.'
-    try:
-        tempfile = upload_path('temporary')
-        verbose_log('Taking photo with Raspberry Pi camera...')
-        retcode = rpi_photo_call(tempfile)
-        if retcode == 0:
-            verbose_log('Image captured.')
-            image = cv2.imread(tempfile)
-            os.remove(tempfile)
-            save_image(image)
-        else:
-            log('Problem getting image.', 'error')
-    except OSError:
+    tempfile = upload_path('temporary')
+    verbose_log('Taking photo with Raspberry Pi camera...')
+    retcode = rpi_photo_call(tempfile)
+    if retcode == 0:
+        verbose_log('Image captured.')
+        image = cv2.imread(tempfile)
+        os.remove(tempfile)
+        save_image(image)
+    else:
         log('Raspberry Pi Camera not detected.', 'error')
 
 
@@ -375,7 +417,7 @@ def take_photo():
     CAMERA = get_camera_selection()
 
     if 'NONE' in CAMERA:
-        log('No camera selected. Choose a camera on the device page.', 'error')
+        log(CAMERA_DISABLED_MSG, 'error')
     elif 'RPI' in CAMERA:
         rpi_camera_photo()
     else:
