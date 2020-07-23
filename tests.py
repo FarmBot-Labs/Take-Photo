@@ -47,6 +47,8 @@ ENVS = [
     'take_photo_logging',
     'camera',
     'IMAGES_DIR',
+    'take_photo_width',
+    'take_photo_height',
     'take_photo_disable_rotation_adjustment',
     'CAMERA_CALIBRATION_total_rotation_angle',
     'FARMBOT_OS_VERSION',
@@ -407,6 +409,22 @@ class TakePhotoTest(unittest.TestCase):
         output = read_output_file(self.outfile)
         self.assertFalse('raspistill' in output)
         self.assertTrue('fswebcam' in output)
+        self.assertFalse('no camera selected' in output)
+
+    @mock.patch('os.listdir', mock.Mock(side_effect=lambda _: ['video0']))
+    @mock.patch('subprocess.call', mock.Mock(side_effect=lambda _: 0))
+    def test_quick_usb_camera_image_size(self):
+        'Test quick capture with usb camera and image size selection.'
+        os.environ['take_photo_disable_rotation_adjustment'] = '1'
+        os.environ['take_photo_width'] = '200'
+        os.environ['take_photo_height'] = '100'
+        os.environ['camera'] = 'usb'
+        with self.assertRaises(SystemExit):
+            re_import()
+        output = read_output_file(self.outfile)
+        self.assertFalse('raspistill' in output)
+        self.assertTrue('fswebcam' in output)
+        self.assertTrue('200x100' in output)
         self.assertFalse('no camera selected' in output)
 
     @mock.patch('subprocess.call', mock.Mock(side_effect=lambda _: 0))

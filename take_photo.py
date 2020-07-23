@@ -12,6 +12,8 @@ from time import time, sleep
 import subprocess
 
 
+WIDTH = os.getenv('take_photo_width', '640')
+HEIGHT = os.getenv('take_photo_height', '480')
 CAMERA_DISABLED_MSG = 'No camera selected. Choose a camera on the device page.'
 
 
@@ -68,7 +70,8 @@ def get_video_port_list():
 
 def usb_camera_call(savepath):
     'Call fswebcam.'
-    args = ['fswebcam', '-r', '640x480', '-S', '10', '--no-banner', savepath]
+    size = '{}x{}'.format(WIDTH, HEIGHT)
+    args = ['fswebcam', '-r', size, '-S', '10', '--no-banner', savepath]
     std_print('Calling `{}`...'.format(' '.join(args)))
     try:
         return subprocess.call(args)
@@ -327,8 +330,8 @@ def usb_camera_photo():
     max_port_num = 1     # highest port to try if not detected on port
     discard_frames = 10  # number of frames to discard for auto-adjust
     max_attempts = 5     # number of failed discard frames before quit
-    image_width = 640    # pixels
-    image_height = 480   # pixels
+    image_width = int(WIDTH)
+    image_height = int(HEIGHT)
 
     # Check USB devices for camera
     device_list_str = _get_usb_device_list()
