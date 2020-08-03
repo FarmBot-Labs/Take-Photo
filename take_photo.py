@@ -271,7 +271,7 @@ def _open_camera(port):
         verbose_log(error)
     try:
         backend = camera.getBackendName()
-    except (AttributeError, NameError):
+    except:
         backend = 'not available'
     verbose_log('using backend: ' + backend)
     sleep(0.1)
