@@ -81,7 +81,7 @@ def usb_camera_call(savepath):
 
 def rpi_photo_call(savepath):
     'Call raspistill.'
-    args = ['raspistill', '-md', '3', '-o', savepath]
+    args = ['raspistill', '-w', WIDTH, '-h', HEIGHT, '-o', savepath]
     std_print('Calling `{}`...'.format(' '.join(args)))
     try:
         return subprocess.call(args)
