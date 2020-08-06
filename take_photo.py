@@ -81,7 +81,12 @@ def usb_camera_call(savepath):
 
 def rpi_photo_call(savepath):
     'Call raspistill.'
-    args = ['raspistill', '-w', WIDTH, '-h', HEIGHT, '-o', savepath]
+    width = min(int(WIDTH), 4056)
+    height = min(int(HEIGHT), 3040)
+    size = ['-w', str(width), '-h', str(height)]
+    if height > 1500:
+        size = ['-md', '3']
+    args = ['raspistill'] + size + ['-o', savepath]
     std_print('Calling `{}`...'.format(' '.join(args)))
     try:
         return subprocess.call(args)

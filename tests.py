@@ -361,7 +361,34 @@ class TakePhotoTest(unittest.TestCase):
         take_photo.take_photo()
         output = read_output_file(self.outfile)
         self.assertTrue('raspberry pi' in output)
+        self.assertTrue('raspistill' in output)
+        self.assertTrue('-w 640 -h 480' in output)
+        self.assertFalse('-md 3' in output)
         self.assertFalse('USB' in output)
+
+    def test_rpi_camera_small_size(self):
+        'Test capture with rpi camera selection and small size inputs.'
+        os.environ['camera'] = 'rpi'
+        os.environ['take_photo_width'] = '200'
+        os.environ['take_photo_height'] = '100'
+        re_import()
+        take_photo.take_photo()
+        output = read_output_file(self.outfile)
+        self.assertTrue('raspistill' in output)
+        self.assertTrue('-w 200 -h 100' in output)
+        self.assertFalse('-md 3' in output)
+
+    def test_rpi_camera_large_size(self):
+        'Test capture with rpi camera selection and large size inputs.'
+        os.environ['camera'] = 'rpi'
+        os.environ['take_photo_width'] = '2000'
+        os.environ['take_photo_height'] = '2000'
+        re_import()
+        take_photo.take_photo()
+        output = read_output_file(self.outfile)
+        self.assertTrue('raspistill' in output)
+        self.assertTrue('-md 3' in output)
+        self.assertFalse('-w' in output)
 
     @mock.patch('cv2.imread', mock.Mock(side_effect=lambda _:
                                         np.zeros([10, 10, 3], np.uint8)))
