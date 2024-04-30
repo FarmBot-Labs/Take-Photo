@@ -49,6 +49,7 @@ ENVS = [
     'IMAGES_DIR',
     'take_photo_width',
     'take_photo_height',
+    'take_photo_args',
     'take_photo_disable_rotation_adjustment',
     'CAMERA_CALIBRATION_total_rotation_angle',
     'FARMBOT_OS_VERSION',
@@ -224,6 +225,7 @@ class TakePhotoTest(unittest.TestCase):
 
     @mock.patch('os.listdir', mock.Mock(
         side_effect=lambda _: ['video0', 'video1', 'video2']))
+    @mock.patch('os.path.exists', mock.Mock(side_effect=lambda _: False))
     def test_not_at_port(self):
         'Test not at video ports.'
         del os.environ['IMAGES_DIR']
@@ -454,7 +456,26 @@ class TakePhotoTest(unittest.TestCase):
         self.assertTrue('200x100' in output)
         self.assertFalse('no camera selected' in output)
 
+    @mock.patch('os.listdir', mock.Mock(side_effect=lambda _: ['video0']))
     @mock.patch('subprocess.call', mock.Mock(side_effect=lambda _: 0))
+    def test_quick_usb_camera_args(self):
+        'Test quick capture with usb camera and argument list.'
+        os.environ['take_photo_disable_rotation_adjustment'] = '1'
+        os.environ['take_photo_width'] = '200'
+        os.environ['take_photo_height'] = '100'
+        os.environ['take_photo_args'] = '["-s", "brightness=100%"]'
+        os.environ['camera'] = 'usb'
+        with self.assertRaises(SystemExit):
+            re_import()
+        output = read_output_file(self.outfile)
+        self.assertFalse('raspistill' in output)
+        self.assertTrue('fswebcam' in output)
+        self.assertTrue('200x100' in output)
+        self.assertTrue('brightness=100%' in output)
+        self.assertFalse('no camera selected' in output)
+
+    @mock.patch('subprocess.call', mock.Mock(side_effect=lambda _: 0))
+    @mock.patch('os.listdir', mock.Mock(side_effect=lambda _: []))
     def test_quick_usb_camera_missing_port(self):
         'Test quick capture with usb camera selection, video port missing.'
         os.environ['take_photo_disable_rotation_adjustment'] = '1'
